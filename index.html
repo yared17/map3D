@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Map 3D </title>
-
+  <title>Map 3D</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/img/plogo.ico">
   <!-- Globe.gl -->
   <script src="https://unpkg.com/globe.gl"></script>
 
@@ -12,10 +12,7 @@
     :root{
       --bg:#0b1320; --panel:#0f1a30; --text:#e6eefc; --muted:#a9b7d0;
       --accent:#4cc9f0; --selected:#80ffdb; --equiv:#ffd166; --border:#21324f;
-
-      /* ★ MÓVIL: 1vh real (se actualiza con JS) */
       --vh: 1vh;
-      /* espaciado seguro en iPhone notch */
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
     }
@@ -28,14 +25,12 @@
       font-family:system-ui, Segoe UI, Roboto, Inter, Arial;
       -webkit-tap-highlight-color: transparent;
     }
-
-    /* ====== LAYOUT DESKTOP ====== */
     #app{
       display:grid;
       grid-template-columns:340px 1fr;
       grid-template-rows:auto 1fr;
       gap:10px;
-      height:calc(var(--vh) * 100);   /* ★ MÓVIL/ESCRITORIO: usa alto real */
+      height:calc(var(--vh) * 100);
       padding:10px;
       padding-top: calc(10px + var(--safe-top));
       padding-bottom: calc(10px + var(--safe-bottom));
@@ -47,15 +42,14 @@
       border-radius:14px;
       padding:10px 14px;
       display:flex; align-items:center; justify-content:space-between;
+      gap:12px;
     }
     header h1{margin:0;font-size:18px;font-weight:700}
-    .pill,button{
+    .pill,button,select{
       background:var(--panel); color:var(--text); border:1px solid var(--border);
-      padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer;
-      touch-action: manipulation; /* reduce delay */
+      padding:10px 12px; border-radius:10px; font-weight:600; cursor:pointer;
     }
-    button:hover{border-color:var(--accent); box-shadow:0 0 0 3px rgba(76,201,240,.12)}
-
+    button:hover, select:hover{border-color:var(--accent); box-shadow:0 0 0 3px rgba(76,201,240,.12)}
     #sidebar{
       grid-row:2; grid-column:1;
       background:var(--panel); border:1px solid var(--border); border-radius:14px;
@@ -64,12 +58,10 @@
     #info{background:rgba(255,255,255,.03); border:1px dashed var(--border); border-radius:12px; padding:10px}
     .stat{display:grid; grid-template-columns:1fr auto; gap:6px; font-size:14px}
     .stat .val{font-weight:700; color:var(--accent)}
-
     #legend{display:flex; gap:8px; flex-wrap:wrap}
     .legend-item{display:inline-flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.03); font-size:13px}
     .sw{width:14px; height:14px; border-radius:3px; border:1px solid #0003}
     .sw.sel{background:var(--selected)} .sw.eq{background:var(--equiv)} .sw.base{background:#6b7280}
-
     #countriesList{
       overflow:auto; flex:1;
       border:1px solid var(--border); border-radius:12px; padding:8px;
@@ -78,27 +70,26 @@
     }
     #countriesList .item{display:flex; justify-content:space-between; gap:8px; padding:8px 10px; border-bottom:1px dashed var(--border); font-size:14px; color:var(--muted)}
     #countriesList .item strong{color:var(--text)}
-
     #globeWrap{
       grid-row:2; grid-column:2;
       border:1px solid var(--border); border-radius:14px; position:relative; min-height:0; background:#000;
-      touch-action: pan-y; /* permite arrastrar barra sin bloquear la página */
+      touch-action: pan-y;
     }
     #globe{position:absolute; inset:0}
-
-    /* ====== LAYOUT MÓVIL ====== */
+    .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size: 15px;}
+    .hint{color:var(--muted); font-size:12px; margin-top:-4px}
     @media (max-width: 980px){
       #app{
         grid-template-columns:1fr;
-        /* header (auto) / globo (48vh) / aside (resto) */
-        grid-template-rows:auto calc(var(--vh) * 48) 1fr;  /* ★ globo alto cómodo */
+        grid-template-rows:auto calc(var(--vh) * 48) 1fr;
       }
       #sidebar{grid-row:3; grid-column:1; padding:12px}
       #globeWrap{grid-row:2; grid-column:1}
       .stat{font-size:15px}
-      .legend-item{font-size:14px; padding:6px 10px}
-      .pill, button{padding:12px 16px} /* tap target más grande */
-      #countriesList{min-height:0}     /* deja que crezca libre dentro del aside */
+      .legend-item{font-size:12px; padding:6px 10px}
+      .pill, button, select{padding:12px 16px}
+      #countriesList{min-height:0}
+      #btnDownload{ display:none !important; }
     }
   </style>
 </head>
@@ -106,7 +97,13 @@
 <div id="app">
   <header>
     <h1>Map 3D</h1>
-    <div class="actions">
+    <div class="row">
+      <label for="metricSelect" class="pill" style="background:transparent;border:none;padding:0;font-weight:700">Métrica:</label>
+      <select id="metricSelect" title="Elegir métrica para equivalencias">
+        <option value="pop" selected>Población</option>
+        <option value="gdp">PIB (USD)</option>
+        <option value="gdp_pc">PIB per cápita (USD)</option>
+      </select>
       <button id="btnDownload">Descargar JSON de población</button>
     </div>
   </header>
@@ -114,15 +111,16 @@
   <aside id="sidebar">
     <div id="info">
       <div class="stat"><span>País seleccionado</span><span class="val" id="selName">—</span></div>
-      <div class="stat"><span>Población objetivo</span><span class="val" id="selPop">—</span></div>
-      <div class="stat"><span>Suma equivalente</span><span class="val" id="sumPop">—</span></div>
-      <div class="stat"><span>Diferencia</span><span class="val" id="diffPop">—</span></div>
+      <div class="stat"><span id="labelTarget">Objetivo (Población)</span><span class="val" id="selVal">—</span></div>
+      <div class="stat"><span>Suma equivalente</span><span class="val" id="sumVal">—</span></div>
+      <div class="stat"><span>Diferencia</span><span class="val" id="diffVal">—</span></div>
     </div>
     <div id="legend">
       <div class="legend-item"><span class="sw sel"></span>Seleccionado</div>
       <div class="legend-item"><span class="sw eq"></span>Equivalentes</div>
       <div class="legend-item"><span class="sw base"></span>Otros</div>
     </div>
+    <div class="hint">Lista de países equivalentes según la métrica elegida.</div>
     <div id="countriesList"></div>
   </aside>
 
@@ -130,16 +128,12 @@
 </div>
 
 <script>
-  
   /* ========= UTIL ========= */
-  const fmt = new Intl.NumberFormat('es-CO');
+  const fmtPop = new Intl.NumberFormat('es-CO'); // población
+  const fmtUSD  = new Intl.NumberFormat('es-CO', { style:'currency', currency:'USD', maximumFractionDigits:0 });
   const $ = id => document.getElementById(id);
-  const setStatus = (msg) => {
-  const el = document.getElementById('statusPill');
-  if (el) el.textContent = msg; // si no existe, no hace nada
-};
+  const setStatus = (msg) => { const el = $('statusPill'); if (el) el.textContent = msg; };
 
-  // ★ MÓVIL: fija --vh con el alto visible real
   function setVHVar(){
     const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     document.documentElement.style.setProperty('--vh', `${vh/100}px`);
@@ -148,10 +142,28 @@
   window.addEventListener('resize', setVHVar);
   window.addEventListener('orientationchange', setVHVar);
 
-  // Datos
-  let globe, features = [], allCountries = [];
+  // Estado
+  let globe, features = [], allCountries = []; // {iso3, name, pop, gdp, gdp_pc}
   let selectedISO3 = null;
   const equivalentsISO3 = new Set();
+  const metricSelect = $('metricSelect');
+
+  // métrica
+  function labelForMetric(m){
+    if (m==='gdp') return 'Objetivo (PIB USD)';
+    if (m==='gdp_pc') return 'Objetivo (PIB per cápita USD)';
+    return 'Objetivo (Población)';
+  }
+  function formatByMetric(m, v){
+    if (v==null || !isFinite(v)) return '—';
+    if (m==='pop') return fmtPop.format(v);
+    return fmtUSD.format(v);
+  }
+  function valueForCountryByMetric(c, m){
+    if (m==='gdp') return c.gdp ?? null;
+    if (m==='gdp_pc') return c.gdp_pc ?? null;
+    return c.pop ?? null;
+  }
 
   /* ========= CARGA GEO ========= */
   async function loadWorldGeo(){
@@ -178,8 +190,53 @@
     return {source:'api'};
   }
 
+  /* ========= CARGA ECONÓMICA (Banco Mundial) ========= */
+  // Devuelve Mapa ISO3 -> último valor no nulo
+  async function loadWBIndicator(indicator){
+    // Nota: usamos per_page alto para evitar paginación extra
+    const url = `https://api.worldbank.org/v2/country/all/indicator/${indicator}?format=json&per_page=20000`;
+    const json = await fetch(url).then(r=>r.json());
+    // json[1] es el array de observaciones
+    const series = json?.[1] || [];
+    const latestByIso = new Map(); // iso3 -> {year, value}
+    for (const row of series){
+      const iso3 = row?.countryiso3code?.toUpperCase?.();
+      const val = row?.value;
+      const year = Number(row?.date);
+      if (!iso3) continue;
+      if (val==null) continue;
+      const prev = latestByIso.get(iso3);
+      if (!prev || year > prev.year){
+        latestByIso.set(iso3, {year, value: Number(val) });
+      }
+    }
+    return latestByIso;
+  }
+
+  async function loadEconomics(){
+    setStatus('Cargando economía (PIB, PIB per cápita)…');
+    const [gdpMap, gdpPcMap] = await Promise.all([
+      loadWBIndicator('NY.GDP.MKTP.CD'),      // PIB USD corrientes
+      loadWBIndicator('NY.GDP.PCAP.CD')       // PIB per cápita USD corrientes
+    ]);
+    // Mezcla con allCountries (según ISO3)
+    const byIso = new Map(allCountries.map(c=>[c.iso3, c]));
+    for (const [iso3, rec] of gdpMap){
+      const c = byIso.get(iso3);
+      if (c) c.gdp = rec.value;
+      else byIso.set(iso3, { iso3, name: iso3, pop: null, gdp: rec.value });
+    }
+    for (const [iso3, rec] of gdpPcMap){
+      const c = byIso.get(iso3);
+      if (c) c.gdp_pc = rec.value;
+      else byIso.set(iso3, { iso3, name: iso3, pop: null, gdp_pc: rec.value });
+    }
+    allCountries = Array.from(byIso.values());
+    setStatus('Economía cargada');
+  }
+
   /* ========= EQUIVALENCIAS ========= */
-  function findApproxCombination(items, target, {tries=350, tolerance=0.02}={}){
+  function findApproxCombination(items, target, {tries=350, tolerance=0.02, accessFn}={}){
     let best = { diff: Infinity, set: [] };
     const maxSum = target*(1+tolerance);
     for (let t=0;t<tries;t++){
@@ -188,10 +245,12 @@
       let sum=0, chosen=[];
       for (let i=0;i<items.length;i++){
         const it = items[(i+offset)%items.length];
-        if (sum+it.pop<=maxSum){
+        const v = accessFn(it);
+        if (v==null || !isFinite(v)) continue;
+        if (sum+v<=maxSum){
           const ratio = sum/target;
           const p = ratio<0.5?1:(ratio<0.8?takeProbBias:0.5);
-          if (Math.random()<p){ chosen.push(it); sum+=it.pop; if (sum>=target) break; }
+          if (Math.random()<p){ chosen.push(it); sum+=v; if (sum>=target) break; }
         }
       }
       const diff = Math.abs(target-sum);
@@ -214,45 +273,56 @@
     if (equivalentsISO3.has(iso))  return 0.016;
     return 0.004;
   };
-
   function refreshPolygons(){
     globe
       .polygonCapColor(capColor)
       .polygonSideColor(sideColor)
       .polygonAltitude(altitude)
       .polygonsTransitionDuration(400)
-      .polygonsData([...features]); // rebind para forzar re-evaluación
+      .polygonsData([...features]);
   }
 
   /* ========= INTERACCIÓN ========= */
   function onPickCountry(f){
     const iso = (f.properties?.iso3||'').toUpperCase();
     const rec = allCountries.find(c=>c.iso3===iso);
-    if(!rec){ setStatus(`Sin población para “${f.properties?.name||'País'}”`); return; }
+    const metric = metricSelect.value; // 'pop' | 'gdp' | 'gdp_pc'
+    const access = (c)=> valueForCountryByMetric(c, metric);
+    const fmtVal = (v)=> formatByMetric(metric, v);
 
-    const target = rec.pop;
-    const pool = allCountries.filter(c=>c.iso3!==iso && Number.isFinite(c.pop)).sort((a,b)=>b.pop-a.pop);
-    const res = findApproxCombination(pool, target, {tries:350, tolerance:0.02});
+    if(!rec || access(rec)==null){
+      setStatus(`Sin dato de ${metric==='pop'?'población':(metric==='gdp'?'PIB':'PIB per cápita')} para “${f.properties?.name||'País'}”`);
+      return;
+    }
+
+    const target = access(rec);
+    const pool = allCountries
+      .filter(c=>c.iso3!==iso && access(c)!=null && isFinite(access(c)))
+      .sort((a,b)=> access(b)-access(a));
+
+    const res = findApproxCombination(pool, target, {tries:350, tolerance:0.02, accessFn:access});
 
     selectedISO3 = iso;
     equivalentsISO3.clear();
     let sum = 0;
-    if (res){ for (const p of res.set){ equivalentsISO3.add(p.iso3); sum+=p.pop; } }
+    if (res){
+      for (const p of res.set){ equivalentsISO3.add(p.iso3); sum+=access(p); }
+    }
 
     // UI
+    $('labelTarget').textContent = labelForMetric(metric);
     $('selName').textContent = rec.name;
-    $('selPop').textContent  = fmt.format(rec.pop);
-    $('sumPop').textContent  = res? fmt.format(sum) : '—';
-    $('diffPop').textContent = res? fmt.format(Math.abs(rec.pop-sum)) : '—';
+    $('selVal').textContent  = fmtVal(target);
+    $('sumVal').textContent  = res? fmtVal(sum) : '—';
+    $('diffVal').textContent = res? fmtVal(Math.abs(target-sum)) : '—';
+
     $('countriesList').innerHTML = res
-      ? res.set.map(p=>`<div class="item"><strong>${p.name}</strong><span>${fmt.format(p.pop)}</span></div>`).join('')
+      ? res.set.map(p=>`<div class="item"><strong>${p.name}</strong><span>${fmtVal(access(p))}</span></div>`).join('')
       : `<div class="item"><span class="muted">No hay países equivalentes listados</span></div>`;
 
-    // re-colorea y centra
     refreshPolygons();
     const c = centroidOfFeature(f);
     globe.pointOfView({ lat:c.lat, lng:c.lng, altitude:1.7 }, 1200);
-
     setStatus('Listo');
   }
 
@@ -266,58 +336,74 @@
 
   /* ========= INICIALIZACIÓN ========= */
   async function main(){
-    setStatus('Cargando datos…');
-    const [geo, popRes] = await Promise.all([loadWorldGeo(), loadPopulation()]);
-    features = geo;
-    
+    try{
+      setStatus('Cargando datos…');
+      const [geo, popRes] = await Promise.all([loadWorldGeo(), loadPopulation()]);
+      features = geo;
 
-    globe = Globe()(document.getElementById('globe'))
-      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-      .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
-      .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
-      .polygonsData(features)
-      .polygonCapColor(capColor)
-      .polygonSideColor(sideColor)
-      .polygonAltitude(altitude)
-      .polygonStrokeColor(()=> '#0b1022')
-      .onPolygonClick(onPickCountry)
-      .onPolygonHover(d=> document.body.style.cursor = d ? 'pointer' : 'grab');
+      // Cargar economía y mezclar
+      await loadEconomics();
 
-      
-    // ★ MÓVIL: limita DPR para rendimiento
-    const clampDPR = Math.min(window.devicePixelRatio || 1, 2);
-    globe.renderer().setPixelRatio(clampDPR);
+      globe = Globe()(document.getElementById('globe'))
+        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+        .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+        .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+        .polygonsData(features)
+        .polygonCapColor(capColor)
+        .polygonSideColor(sideColor)
+        .polygonAltitude(altitude)
+        .polygonStrokeColor(()=> '#0b1022')
+        .onPolygonClick(onPickCountry)
+        .onPolygonHover(d=> document.body.style.cursor = d ? 'pointer' : 'grab');
 
-    // auto-rotación y límites de cámara
-    globe.controls().autoRotate = true;
-    globe.controls().autoRotateSpeed = 0.7;
-    globe.controls().minDistance = 180;
-    globe.controls().maxDistance = 600;
+      // DPR
+      globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
-    // ★ MÓVIL: re-dimensiona canvas en cambios de viewport/orientación
-    function resizeGlobe(){
-      const wrap = document.getElementById('globeWrap');
-      const {width, height} = wrap.getBoundingClientRect();
-      globe.width(width);
-      globe.height(height);
-      globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+      // cámara
+      globe.controls().autoRotate = true;
+      globe.controls().autoRotateSpeed = 0.7;
+      globe.controls().minDistance = 180;
+      globe.controls().maxDistance = 600;
+
+      // responsive
+      function resizeGlobe(){
+        const wrap = document.getElementById('globeWrap');
+        const {width, height} = wrap.getBoundingClientRect();
+        globe.width(width);
+        globe.height(height);
+        globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+      }
+      const ro = new ResizeObserver(resizeGlobe);
+      ro.observe(document.getElementById('globeWrap'));
+      window.addEventListener('orientationchange', ()=>setTimeout(resizeGlobe, 250));
+      setTimeout(resizeGlobe, 0);
+
+      setStatus(popRes.source==='api' ? 'Datos cargados (API población)' : 'Datos cargados (cache población)');
+    }catch(err){
+      console.error(err);
+      setStatus('Error cargando datos');
     }
-    const ro = new ResizeObserver(resizeGlobe);
-    ro.observe(document.getElementById('globeWrap'));
-    window.addEventListener('orientationchange', ()=>setTimeout(resizeGlobe, 250));
-    setTimeout(resizeGlobe, 0);
-
-    setStatus(popRes.source==='api' ? 'Datos cargados (API)' : 'Datos cargados (cache)');
   }
   main();
+
+  // Recalcular al cambiar la métrica
+  metricSelect.addEventListener('change', ()=>{
+    $('labelTarget').textContent = labelForMetric(metricSelect.value);
+    // Si ya hay un país seleccionado, recalculamos con la nueva métrica
+    if (selectedISO3){
+      const f = features.find(ft=> (ft.properties?.iso3||'').toUpperCase()===selectedISO3);
+      if (f) onPickCountry(f);
+    }
+  });
 
   /* ========= DESCARGA JSON ========= */
   $('btnDownload').addEventListener('click', ()=>{
     const payload = allCountries.slice().sort((a,b)=> a.name.localeCompare(b.name));
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
-    const a = document.createElement('a'); a.href=dataStr; a.download='poblacion_paises.json';
+    const a = document.createElement('a'); a.href=dataStr; a.download='paises_pop_gdp.json';
     document.body.appendChild(a); a.click(); a.remove();
   });
 </script>
 </body>
 </html>
+
