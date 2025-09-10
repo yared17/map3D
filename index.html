@@ -65,7 +65,9 @@
     .sw.sel{background:var(--selected)} .sw.eq{background:var(--equiv)} .sw.base{background:#6b7280}
 
     .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size: 15px;}
-
+    .metric-group{
+      display: none !important;
+    }
     /* Lista principal */
     #countriesList{
       overflow:auto; flex:1;
@@ -140,8 +142,17 @@
 .item .score-red{    color:#f44336 !important; background:rgba(244,67,54,.12); }
 .item .right-pack{ display:inline-flex; gap:8px; align-items:center; }
 
+.country-link {
+  color: var(--text);         /* usa el color de texto principal (blanco) */
+  text-decoration: none;      /* sin subrayado */
+  font-weight: 600;           /* un poco más marcado */
+  cursor: pointer;
+}
 
-
+.country-link:hover {
+  color: var(--accent);       /* al pasar el mouse, que tome tu color de acento */
+  text-decoration: underline; /* opcional: solo subraya al pasar */
+}
     
   </style>
 </head>
@@ -518,19 +529,24 @@ function onPickCountry(f){
     // Construcción lista
     const block = [];
 
-    // === Más parecido (combinado) con color ===
-    block.push(`<div class="section">Más parecido (combinado)</div>`);
-    if (nComb){
-      const perc = (nComb.score*100).toFixed(2);
-      block.push(
-        `<div class="item">
-           <strong>${nComb.country.name}</strong>
-           <span class="score-badge ${scoreClass(nComb.score)}">${perc}%</span>
-         </div>`
-      );
-    }else{
-      block.push(`<div class="item"><span class="muted">—</span></div>`);
-    }
+// === Más parecido (combinado) con color y enlace ===
+block.push(`<div class="section">Más parecido (combinado)</div>`);
+if (nComb){
+  const perc = (nComb.score*100).toFixed(2);
+
+  block.push(
+    `<div class="item">
+       <strong>
+         <a href="#" class="country-link" data-iso="${nComb.country.iso3}">
+           ${nComb.country.name}
+         </a>
+       </strong>
+       <span class="score-badge ${scoreClass(nComb.score)}">${perc}%</span>
+     </div>`
+  );
+}else{
+  block.push(`<div class="item"><span class="muted">—</span></div>`);
+}
 
     // === Por métrica (una sola vez) con badges de color ===
     block.push(`<div class="section">Por métrica</div>`);
@@ -594,6 +610,20 @@ function onPickCountry(f){
 
     $('countriesList').innerHTML = block.join('');
   }
+// Enlazar los clicks en nombres de país
+document.querySelectorAll('.country-link').forEach(el=>{
+  el.addEventListener('click', ev=>{
+    ev.preventDefault();
+    const iso = el.dataset.iso;
+    const feat = features.find(ft => (ft.properties?.iso3||'').toUpperCase() === iso);
+    if (feat){
+      const c = centroidOfFeature(feat);
+      globe.pointOfView({ lat:c.lat, lng:c.lng, altitude:1.7 }, 1200);
+    }
+  });
+});
+
+
 
   refreshPolygons();
   const c = centroidOfFeature(f);
