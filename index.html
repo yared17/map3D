@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Map 3D </title>
+
+  <!-- Globe.gl -->
+  <script src="https://unpkg.com/globe.gl"></script>
+
+  <style>
+    :root{
+      --bg:#0b1320; --panel:#0f1a30; --text:#e6eefc; --muted:#a9b7d0;
+      --accent:#4cc9f0; --selected:#80ffdb; --equiv:#ffd166; --border:#21324f;
+
+      /* ★ MÓVIL: 1vh real (se actualiza con JS) */
+      --vh: 1vh;
+      /* espaciado seguro en iPhone notch */
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    *{box-sizing:border-box}
+    html,body{
+      height:100%;
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:system-ui, Segoe UI, Roboto, Inter, Arial;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ====== LAYOUT DESKTOP ====== */
+    #app{
+      display:grid;
+      grid-template-columns:340px 1fr;
+      grid-template-rows:auto 1fr;
+      gap:10px;
+      height:calc(var(--vh) * 100);   /* ★ MÓVIL/ESCRITORIO: usa alto real */
+      padding:10px;
+      padding-top: calc(10px + var(--safe-top));
+      padding-bottom: calc(10px + var(--safe-bottom));
+    }
+    header{
+      grid-column:1/3;
+      background:linear-gradient(90deg, rgba(76,201,240,.12), rgba(100,223,223,.04));
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:10px 14px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    header h1{margin:0;font-size:18px;font-weight:700}
+    .pill,button{
+      background:var(--panel); color:var(--text); border:1px solid var(--border);
+      padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer;
+      touch-action: manipulation; /* reduce delay */
+    }
+    button:hover{border-color:var(--accent); box-shadow:0 0 0 3px rgba(76,201,240,.12)}
+
+    #sidebar{
+      grid-row:2; grid-column:1;
+      background:var(--panel); border:1px solid var(--border); border-radius:14px;
+      padding:14px; display:flex; flex-direction:column; gap:10px; min-height:0;
+    }
+    #info{background:rgba(255,255,255,.03); border:1px dashed var(--border); border-radius:12px; padding:10px}
+    .stat{display:grid; grid-template-columns:1fr auto; gap:6px; font-size:14px}
+    .stat .val{font-weight:700; color:var(--accent)}
+
+    #legend{display:flex; gap:8px; flex-wrap:wrap}
+    .legend-item{display:inline-flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.03); font-size:13px}
+    .sw{width:14px; height:14px; border-radius:3px; border:1px solid #0003}
+    .sw.sel{background:var(--selected)} .sw.eq{background:var(--equiv)} .sw.base{background:#6b7280}
+
+    #countriesList{
+      overflow:auto; flex:1;
+      border:1px solid var(--border); border-radius:12px; padding:8px;
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+    #countriesList .item{display:flex; justify-content:space-between; gap:8px; padding:8px 10px; border-bottom:1px dashed var(--border); font-size:14px; color:var(--muted)}
+    #countriesList .item strong{color:var(--text)}
+
+    #globeWrap{
+      grid-row:2; grid-column:2;
+      border:1px solid var(--border); border-radius:14px; position:relative; min-height:0; background:#000;
+      touch-action: pan-y; /* permite arrastrar barra sin bloquear la página */
+    }
+    #globe{position:absolute; inset:0}
+
+    /* ====== LAYOUT MÓVIL ====== */
+    @media (max-width: 980px){
+      #app{
+        grid-template-columns:1fr;
+        /* header (auto) / globo (48vh) / aside (resto) */
+        grid-template-rows:auto calc(var(--vh) * 48) 1fr;  /* ★ globo alto cómodo */
+      }
+      #sidebar{grid-row:3; grid-column:1; padding:12px}
+      #globeWrap{grid-row:2; grid-column:1}
+      .stat{font-size:15px}
+      .legend-item{font-size:14px; padding:6px 10px}
+      .pill, button{padding:12px 16px} /* tap target más grande */
+      #countriesList{min-height:0}     /* deja que crezca libre dentro del aside */
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Map 3D</h1>
+    <div class="actions">
+      <button id="btnDownload">Descargar JSON de población</button>
+    </div>
+  </header>
+
+  <aside id="sidebar">
+    <div id="info">
+      <div class="stat"><span>País seleccionado</span><span class="val" id="selName">—</span></div>
+      <div class="stat"><span>Población objetivo</span><span class="val" id="selPop">—</span></div>
+      <div class="stat"><span>Suma equivalente</span><span class="val" id="sumPop">—</span></div>
+      <div class="stat"><span>Diferencia</span><span class="val" id="diffPop">—</span></div>
+    </div>
+    <div id="legend">
+      <div class="legend-item"><span class="sw sel"></span>Seleccionado</div>
+      <div class="legend-item"><span class="sw eq"></span>Equivalentes</div>
+      <div class="legend-item"><span class="sw base"></span>Otros</div>
+    </div>
+    <div id="countriesList"></div>
+  </aside>
+
+  <div id="globeWrap"><div id="globe"></div></div>
+</div>
+
+<script>
+  
+  /* ========= UTIL ========= */
+  const fmt = new Intl.NumberFormat('es-CO');
+  const $ = id => document.getElementById(id);
+  const setStatus = (msg) => {
+  const el = document.getElementById('statusPill');
+  if (el) el.textContent = msg; // si no existe, no hace nada
+};
+
+  // ★ MÓVIL: fija --vh con el alto visible real
+  function setVHVar(){
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--vh', `${vh/100}px`);
+  }
+  setVHVar();
+  window.addEventListener('resize', setVHVar);
+  window.addEventListener('orientationchange', setVHVar);
+
+  // Datos
+  let globe, features = [], allCountries = [];
+  let selectedISO3 = null;
+  const equivalentsISO3 = new Set();
+
+  /* ========= CARGA GEO ========= */
+  async function loadWorldGeo(){
+    const url = 'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson';
+    const geo = await fetch(url, {mode:'cors'}).then(r=>r.json());
+    const arr = geo.features;
+    arr.forEach(f=>{
+      const p = f.properties || {};
+      p.name = p.name || p.ADMIN || p.NAME || p.name_long || p.sovereignt || 'País';
+      p.iso3 = String(p.ISO_A3 || p.ADM0_A3 || p.iso_a3 || f.id || '').toUpperCase().replace(/[^A-Z]/g,'');
+      f.properties = p;
+    });
+    return arr;
+  }
+
+  /* ========= CARGA POBLACIÓN ========= */
+  async function loadPopulation(){
+    const cache = localStorage.getItem('world_pop_v1');
+    if (cache){ allCountries = JSON.parse(cache); return {source:'cache'}; }
+    const data = await fetch('https://restcountries.com/v3.1/all?fields=name,cca3,population').then(r=>r.json());
+    allCountries = data.filter(d=>d?.name?.common && Number.isFinite(d.population))
+                       .map(d=>({ iso3:String(d.cca3).toUpperCase(), name:d.name.common, pop:d.population }));
+    localStorage.setItem('world_pop_v1', JSON.stringify(allCountries));
+    return {source:'api'};
+  }
+
+  /* ========= EQUIVALENCIAS ========= */
+  function findApproxCombination(items, target, {tries=350, tolerance=0.02}={}){
+    let best = { diff: Infinity, set: [] };
+    const maxSum = target*(1+tolerance);
+    for (let t=0;t<tries;t++){
+      const offset = Math.floor(Math.random()*Math.min(20, items.length));
+      const takeProbBias = 0.85;
+      let sum=0, chosen=[];
+      for (let i=0;i<items.length;i++){
+        const it = items[(i+offset)%items.length];
+        if (sum+it.pop<=maxSum){
+          const ratio = sum/target;
+          const p = ratio<0.5?1:(ratio<0.8?takeProbBias:0.5);
+          if (Math.random()<p){ chosen.push(it); sum+=it.pop; if (sum>=target) break; }
+        }
+      }
+      const diff = Math.abs(target-sum);
+      if (diff<best.diff){ best={diff,set:[...chosen]}; if (!diff) break; }
+    }
+    return best.set.length? best:null;
+  }
+
+  /* ========= COLOREO ========= */
+  const capColor = f => {
+    const iso = (f.properties?.iso3||'').toUpperCase();
+    if (iso && iso===selectedISO3) return '#80ffdb';
+    if (equivalentsISO3.has(iso))  return '#ffd166';
+    return 'rgba(107,114,128,0.65)';
+  };
+  const sideColor = ()=>'rgba(42,61,102,0.9)';
+  const altitude  = f => {
+    const iso = (f.properties?.iso3||'').toUpperCase();
+    if (iso && iso===selectedISO3) return 0.025;
+    if (equivalentsISO3.has(iso))  return 0.016;
+    return 0.004;
+  };
+
+  function refreshPolygons(){
+    globe
+      .polygonCapColor(capColor)
+      .polygonSideColor(sideColor)
+      .polygonAltitude(altitude)
+      .polygonsTransitionDuration(400)
+      .polygonsData([...features]); // rebind para forzar re-evaluación
+  }
+
+  /* ========= INTERACCIÓN ========= */
+  function onPickCountry(f){
+    const iso = (f.properties?.iso3||'').toUpperCase();
+    const rec = allCountries.find(c=>c.iso3===iso);
+    if(!rec){ setStatus(`Sin población para “${f.properties?.name||'País'}”`); return; }
+
+    const target = rec.pop;
+    const pool = allCountries.filter(c=>c.iso3!==iso && Number.isFinite(c.pop)).sort((a,b)=>b.pop-a.pop);
+    const res = findApproxCombination(pool, target, {tries:350, tolerance:0.02});
+
+    selectedISO3 = iso;
+    equivalentsISO3.clear();
+    let sum = 0;
+    if (res){ for (const p of res.set){ equivalentsISO3.add(p.iso3); sum+=p.pop; } }
+
+    // UI
+    $('selName').textContent = rec.name;
+    $('selPop').textContent  = fmt.format(rec.pop);
+    $('sumPop').textContent  = res? fmt.format(sum) : '—';
+    $('diffPop').textContent = res? fmt.format(Math.abs(rec.pop-sum)) : '—';
+    $('countriesList').innerHTML = res
+      ? res.set.map(p=>`<div class="item"><strong>${p.name}</strong><span>${fmt.format(p.pop)}</span></div>`).join('')
+      : `<div class="item"><span class="muted">No hay países equivalentes listados</span></div>`;
+
+    // re-colorea y centra
+    refreshPolygons();
+    const c = centroidOfFeature(f);
+    globe.pointOfView({ lat:c.lat, lng:c.lng, altitude:1.7 }, 1200);
+
+    setStatus('Listo');
+  }
+
+  function centroidOfFeature(f){
+    const g = f.geometry;
+    const rings = g.type==='Polygon' ? [g.coordinates] : g.coordinates;
+    let sl=0, sg=0, n=0;
+    rings.forEach(poly=>poly[0].forEach(([lng,lat])=>{ sl+=lat; sg+=lng; n++; }));
+    return {lat: sl/n, lng: sg/n};
+  }
+
+  /* ========= INICIALIZACIÓN ========= */
+  async function main(){
+    setStatus('Cargando datos…');
+    const [geo, popRes] = await Promise.all([loadWorldGeo(), loadPopulation()]);
+    features = geo;
+    
+
+    globe = Globe()(document.getElementById('globe'))
+      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+      .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+      .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+      .polygonsData(features)
+      .polygonCapColor(capColor)
+      .polygonSideColor(sideColor)
+      .polygonAltitude(altitude)
+      .polygonStrokeColor(()=> '#0b1022')
+      .onPolygonClick(onPickCountry)
+      .onPolygonHover(d=> document.body.style.cursor = d ? 'pointer' : 'grab');
+
+      
+    // ★ MÓVIL: limita DPR para rendimiento
+    const clampDPR = Math.min(window.devicePixelRatio || 1, 2);
+    globe.renderer().setPixelRatio(clampDPR);
+
+    // auto-rotación y límites de cámara
+    globe.controls().autoRotate = true;
+    globe.controls().autoRotateSpeed = 0.7;
+    globe.controls().minDistance = 180;
+    globe.controls().maxDistance = 600;
+
+    // ★ MÓVIL: re-dimensiona canvas en cambios de viewport/orientación
+    function resizeGlobe(){
+      const wrap = document.getElementById('globeWrap');
+      const {width, height} = wrap.getBoundingClientRect();
+      globe.width(width);
+      globe.height(height);
+      globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+    }
+    const ro = new ResizeObserver(resizeGlobe);
+    ro.observe(document.getElementById('globeWrap'));
+    window.addEventListener('orientationchange', ()=>setTimeout(resizeGlobe, 250));
+    setTimeout(resizeGlobe, 0);
+
+    setStatus(popRes.source==='api' ? 'Datos cargados (API)' : 'Datos cargados (cache)');
+  }
+  main();
+
+  /* ========= DESCARGA JSON ========= */
+  $('btnDownload').addEventListener('click', ()=>{
+    const payload = allCountries.slice().sort((a,b)=> a.name.localeCompare(b.name));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+    const a = document.createElement('a'); a.href=dataStr; a.download='poblacion_paises.json';
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+</script>
+</body>
+</html>
