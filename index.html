@@ -127,6 +127,19 @@
     align-self: flex-end;         /* se alinea abajo de su fila */
   }
 }
+.score-badge{
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+  display: inline-block;
+  line-height: 1.2;
+}
+.item .score-green{  color:#22c55e !important; background:rgba(34,197,94,.12); }
+.item .score-orange{ color:#ff9800 !important; background:rgba(255,152,0,.12); }
+.item .score-red{    color:#f44336 !important; background:rgba(244,67,54,.12); }
+.item .right-pack{ display:inline-flex; gap:8px; align-items:center; }
+
 
 
     
@@ -178,6 +191,13 @@
 </div>
 
 <script>
+  function scoreClass(score){
+  if (!isFinite(score)) return 'score-red';
+  if (score < 0.15) return 'score-green';
+  if (score < 0.5)  return 'score-orange';
+  return 'score-red';
+}
+
   /* ========= UTIL ========= */
   const fmtPop = new Intl.NumberFormat('es-CO'); // población
   const fmtUSD  = new Intl.NumberFormat('es-CO', { style:'currency', currency:'USD', maximumFractionDigits:0 });
@@ -391,14 +411,14 @@
     }
     return 0.004;
   };
-  function refreshPolygons(){
-    globe
-      .polygonCapColor(capColor)
-      .polygonSideColor(sideColor)
-      .polygonAltitude(altitude)
-      .polygonsTransitionDuration(400)
-      .polygonsData([...features]);
-  }
+function refreshPolygons(){
+  globe
+    .polygonCapColor(capColor)
+    .polygonSideColor(sideColor)
+    .polygonAltitude(altitude)
+    .polygonsTransitionDuration(0)  // ← evita re-teselado animado
+    .polygonsData(features);
+}
 
   /* ========= INTERFAZ DINÁMICA ========= */
   function updateInfoLabelsForMode(){
@@ -431,104 +451,156 @@
   }
 
   /* ========= INTERACCIÓN ========= */
-  function onPickCountry(f){
-    const iso = (f.properties?.iso3||'').toUpperCase();
-    const rec = allCountries.find(c=>c.iso3===iso);
-    const metric = metricSelect.value; // 'pop' | 'gdp' | 'gdp_pc'
-    const access = (c)=> valueForCountryByMetric(c, metric);
-    const fmtVal = (v)=> formatByMetric(metric, v);
+function onPickCountry(f){
+  const iso = (f.properties?.iso3||'').toUpperCase();
+  const rec = allCountries.find(c=>c.iso3===iso);
+  const metric = metricSelect.value; // 'pop' | 'gdp' | 'gdp_pc'
+  const access = (c)=> valueForCountryByMetric(c, metric);
+  const fmtVal = (v)=> formatByMetric(metric, v);
 
-    if(!rec){
-      setStatus('Sin datos del país seleccionado');
+  if(!rec){
+    setStatus('Sin datos del país seleccionado');
+    return;
+  }
+  selectedISO3 = iso;
+
+  $('labelTarget').textContent = labelForMetric(metric);
+  $('selName').textContent = rec.name;
+  $('selVal').textContent  = access(rec)!=null ? fmtVal(access(rec)) : '—';
+
+  if (mode==='equiv'){
+    // === MODO EQUIVALENCIAS (suma) ===
+    const target = access(rec);
+    if(target==null){
+      setStatus('Sin dato para la métrica elegida');
+      $('countriesList').innerHTML = `<div class="item"><span class="muted">No hay datos suficientes para esta métrica.</span></div>`;
+      refreshPolygons();
       return;
     }
-    selectedISO3 = iso;
 
-    $('labelTarget').textContent = labelForMetric(metric);
-    $('selName').textContent = rec.name;
-    $('selVal').textContent  = access(rec)!=null ? fmtVal(access(rec)) : '—';
+    const pool = allCountries
+      .filter(c=>c.iso3!==iso && access(c)!=null && isFinite(access(c)))
+      .sort((a,b)=> access(b)-access(a));
 
-    if (mode==='equiv'){
-      // === MODO EQUIVALENCIAS (suma) ===
-      const target = access(rec);
-      if(target==null){
-        setStatus('Sin dato para la métrica elegida');
-        $('countriesList').innerHTML = `<div class="item"><span class="muted">No hay datos suficientes para esta métrica.</span></div>`;
-        refreshPolygons();
-        return;
-      }
+    const res = findApproxCombination(pool, target, {tries:350, tolerance:0.02, accessFn:access});
 
-      const pool = allCountries
-        .filter(c=>c.iso3!==iso && access(c)!=null && isFinite(access(c)))
-        .sort((a,b)=> access(b)-access(a));
-
-      const res = findApproxCombination(pool, target, {tries:350, tolerance:0.02, accessFn:access});
-
-      equivalentsISO3.clear();
-      nearestCombinedISO3 = null;
-      let sum = 0;
-      if (res){
-        for (const p of res.set){ equivalentsISO3.add(p.iso3); sum+=access(p); }
-      }
-
-      $('sumVal').textContent  = res? fmtVal(sum) : '—';
-      $('diffVal').textContent = res? fmtVal(Math.abs(target-sum)) : '—';
-
-      $('countriesList').innerHTML = res
-        ? [`<div class="section">Equivalentes</div>`,
-           ...res.set.map(p=>`<div class="item"><strong>${p.name}</strong><span>${fmtVal(access(p))}</span></div>`)]
-            .join('')
-        : `<div class="item"><span class="muted">No hay países equivalentes listados</span></div>`;
-
-    } else {
-      // === MODO PARECIDOS 1:1 ===
-      equivalentsISO3.clear();
-
-      // Nearest por métrica
-      const nPop = findNearestByMetric(rec,'pop');
-      const nGdp = findNearestByMetric(rec,'gdp');
-      const nGpc = findNearestByMetric(rec,'gdp_pc');
-      const nComb = findNearestCombined(rec, WEIGHTS_DEFAULT);
-      nearestCombinedISO3 = nComb?.country?.iso3 || null;
-
-      // Cabecera
-      $('sumVal').textContent = nComb ? `${nComb.country.name}` : '—';
-      $('diffVal').textContent = nComb && isFinite(nComb.score) ? `${(nComb.score*100).toFixed(2)}%` : '—';
-
-      // Top 5 combinados (excluyendo el mejor para no duplicar)
-      let top5 = topKCombined(rec, 6, WEIGHTS_DEFAULT); // pedimos 6 por si el primero es el mejor
-      if (nComb){
-        top5 = top5.filter(x => x.country.iso3 !== nComb.country.iso3).slice(0,5);
-      }else{
-        top5 = top5.slice(0,5);
-      }
-
-      const block = [];
-      block.push(`<div class="section">Más parecido (combinado)</div>`);
-      if (nComb){
-        block.push(`<div class="item"><strong>${nComb.country.name}</strong><span class="tag">${(nComb.score*100).toFixed(2)}%</span></div>`);
-      }else{
-        block.push(`<div class="item"><span class="muted">—</span></div>`);
-      }
-
-      block.push(`<div class="section">Por métrica</div>`);
-      block.push(`<div class="item"><strong>Población</strong><span class="tag">${nPop? (nPop.country.name+' · '+(nPop.err*100).toFixed(2)+'%') : '—'}</span></div>`);
-      block.push(`<div class="item"><strong>PIB</strong><span class="tag">${nGdp? (nGdp.country.name+' · '+(nGdp.err*100).toFixed(2)+'%') : '—'}</span></div>`);
-      block.push(`<div class="item"><strong>PIB per cápita</strong><span class="tag">${nGpc? (nGpc.country.name+' · '+(nGpc.err*100).toFixed(2)+'%') : '—'}</span></div>`);
-
-      block.push(`<div class="section">Otros similares (Top 5 combinados)</div>`);
-      for (const r of top5){
-        block.push(`<div class="item"><span>${r.country.name}</span><span class="tag">${(r.score*100).toFixed(2)}%</span></div>`);
-      }
-
-      $('countriesList').innerHTML = block.join('');
+    equivalentsISO3.clear();
+    nearestCombinedISO3 = null;
+    let sum = 0;
+    if (res){
+      for (const p of res.set){ equivalentsISO3.add(p.iso3); sum+=access(p); }
     }
 
-    refreshPolygons();
-    const c = centroidOfFeature(f);
-    globe.pointOfView({ lat:c.lat, lng:c.lng, altitude:1.7 }, 1200);
-    setStatus('Listo');
+    $('sumVal').textContent  = res? fmtVal(sum) : '—';
+    $('diffVal').textContent = res? fmtVal(Math.abs(target-sum)) : '—';
+
+    $('countriesList').innerHTML = res
+      ? [`<div class="section">Equivalentes</div>`,
+         ...res.set.map(p=>`<div class="item"><strong>${p.name}</strong><span>${fmtVal(access(p))}</span></div>`)]
+          .join('')
+      : `<div class="item"><span class="muted">No hay países equivalentes listados</span></div>`;
+
+  } else {
+    // === MODO PARECIDOS 1:1 ===
+    equivalentsISO3.clear();
+
+    // Nearest por métrica y combinado
+    const nPop  = findNearestByMetric(rec,'pop');
+    const nGdp  = findNearestByMetric(rec,'gdp');
+    const nGpc  = findNearestByMetric(rec,'gdp_pc');
+    const nComb = findNearestCombined(rec, WEIGHTS_DEFAULT);
+    nearestCombinedISO3 = nComb?.country?.iso3 || null;
+
+    // Cabecera
+    $('sumVal').textContent = nComb ? `${nComb.country.name}` : '—';
+    $('diffVal').textContent = nComb && isFinite(nComb.score) ? `${(nComb.score*100).toFixed(2)}%` : '—';
+
+    // Construcción lista
+    const block = [];
+
+    // === Más parecido (combinado) con color ===
+    block.push(`<div class="section">Más parecido (combinado)</div>`);
+    if (nComb){
+      const perc = (nComb.score*100).toFixed(2);
+      block.push(
+        `<div class="item">
+           <strong>${nComb.country.name}</strong>
+           <span class="score-badge ${scoreClass(nComb.score)}">${perc}%</span>
+         </div>`
+      );
+    }else{
+      block.push(`<div class="item"><span class="muted">—</span></div>`);
+    }
+
+    // === Por métrica (una sola vez) con badges de color ===
+    block.push(`<div class="section">Por métrica</div>`);
+
+    // Población
+    if (nPop){
+      const p = (nPop.err*100).toFixed(2);
+      block.push(
+        `<div class="item">
+           <strong>Población</strong>
+           <span class="right-pack"><span class="tag">${nPop.country.name}</span><span class="score-badge ${scoreClass(nPop.err)}">${p}%</span></span>
+         </div>`
+      );
+    } else {
+      block.push(`<div class="item"><strong>Población</strong><span>—</span></div>`);
+    }
+
+    // PIB
+    if (nGdp){
+      const p = (nGdp.err*100).toFixed(2);
+      block.push(
+        `<div class="item">
+           <strong>PIB</strong>
+           <span class="right-pack"><span class="tag">${nGdp.country.name}</span><span class="score-badge ${scoreClass(nGdp.err)}">${p}%</span></span>
+         </div>`
+      );
+    } else {
+      block.push(`<div class="item"><strong>PIB</strong><span>—</span></div>`);
+    }
+
+    // PIB per cápita
+    if (nGpc){
+      const p = (nGpc.err*100).toFixed(2);
+      block.push(
+        `<div class="item">
+           <strong>PIB per cápita</strong>
+           <span class="right-pack"><span class="tag">${nGpc.country.name}</span><span class="score-badge ${scoreClass(nGpc.err)}">${p}%</span></span>
+         </div>`
+      );
+    } else {
+      block.push(`<div class="item"><strong>PIB per cápita</strong><span>—</span></div>`);
+    }
+
+    // === Otros similares (Top 5) SOLO si el mejor del resto < 50% y con color ===
+    let top5 = topKCombined(rec, 6, WEIGHTS_DEFAULT);
+    if (nComb){ top5 = top5.filter(x => x.country.iso3 !== nComb.country.iso3); }
+    if (!(top5.length && top5[0].score < 0.5)) top5 = [];
+
+    if (top5.length){
+      block.push(`<div class="section">Otros similares (Top 5 combinados)</div>`);
+      for (const r of top5.slice(0,5)){
+        const p = (r.score*100).toFixed(2);
+        block.push(
+          `<div class="item">
+             <span>${r.country.name}</span>
+             <span class="score-badge ${scoreClass(r.score)}">${p}%</span>
+           </div>`
+        );
+      }
+    }
+
+    $('countriesList').innerHTML = block.join('');
   }
+
+  refreshPolygons();
+  const c = centroidOfFeature(f);
+  globe.pointOfView({ lat:c.lat, lng:c.lng, altitude:1.7 }, 1200);
+  setStatus('Listo');
+}
+
 
   function centroidOfFeature(f){
     const g = f.geometry;
