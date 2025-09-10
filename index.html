@@ -194,7 +194,6 @@
       <div class="legend-item"><span class="sw base"></span>Otros</div>
     </div>
 
-    <div class="hint" id="hintText">Lista de países equivalentes según la métrica elegida.</div>
     <div id="countriesList"></div>
   </aside>
 
@@ -434,12 +433,10 @@ function refreshPolygons(){
   /* ========= INTERFAZ DINÁMICA ========= */
   function updateInfoLabelsForMode(){
     if (mode==='equiv'){
-      $('hintText').textContent = 'Lista de países equivalentes según la métrica elegida.';
       $('labelSum').textContent = 'Suma equivalente';
       $('labelDiff').textContent = 'Diferencia';
       $('legendModeLabel').textContent = 'Equivalentes';
     }else{
-      $('hintText').textContent = 'País más parecido (combinado y por cada métrica).';
       $('labelSum').textContent = 'Más parecido (combinado)';
       $('labelDiff').textContent = 'Score (↓ es mejor)';
       $('legendModeLabel').textContent = 'Más parecido';
